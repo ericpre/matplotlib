@@ -1710,6 +1710,8 @@ class _SelectorWidget(AxesWidget):
         else:
             self.validButtons = button
 
+        self._completed = False
+
         # will save the data (position at mouseclick)
         self.eventpress = None
         # will save the data (pos. at mouserelease)
@@ -1958,6 +1960,10 @@ class SpanSelector(_SelectorWidget):
         If `True`, the widget can be moved by clicking anywhere within
         its bounds.
 
+    ignore_event_outside : bool, optional
+        If `True`, the event triggered outside the span selector will be
+        ignored. Default is `False`.
+
     Examples
     --------
     >>> import matplotlib.pyplot as plt
@@ -1978,7 +1984,8 @@ class SpanSelector(_SelectorWidget):
     def __init__(self, ax, onselect, direction, minspan=0, useblit=False,
                  rectprops=None, maxdist=10, marker_props=None,
                  onmove_callback=None, interactive=False,
-                 button=None, drag_from_anywhere=False):
+                 button=None, drag_from_anywhere=False,
+                 ignore_event_outside=False):
 
         super().__init__(ax, onselect, useblit=useblit, button=button)
 
@@ -2001,6 +2008,9 @@ class SpanSelector(_SelectorWidget):
         self.maxdist = maxdist
         self.interactive = interactive
         self.drag_from_anywhere = drag_from_anywhere
+        self.ignore_event_outside = ignore_event_outside
+
+        self._completed = False
 
         # Reset canvas so that `new_axes` connects events.
         self.canvas = None
@@ -2078,6 +2088,7 @@ class SpanSelector(_SelectorWidget):
 
         self.onselect(vmin, vmax)
         self.update()
+        self._completed = True
 
         return False
 
@@ -2108,6 +2119,10 @@ class SpanSelector(_SelectorWidget):
                 vmax = v
         # new shape
         else:
+            # Don't create a new span if there is already one when
+            # ignore_event_outside=True
+            if self.ignore_event_outside and self._completed:
+                return
             vmin, vmax = vpress, v
             if vmin > vmax:
                 vmin, vmax = vmax, vmin
