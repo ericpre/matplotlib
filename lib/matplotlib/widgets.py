@@ -2346,7 +2346,7 @@ class RectangleSelector(_SelectorWidget):
                  lineprops=None, rectprops=None, spancoords='data',
                  button=None, maxdist=10, marker_props=None,
                  interactive=False, state_modifier_keys=None,
-                 drag_from_anywhere=False):
+                 drag_from_anywhere=False, ignore_event_outside=False):
         r"""
         Parameters
         ----------
@@ -2430,6 +2430,7 @@ class RectangleSelector(_SelectorWidget):
         self.visible = True
         self.interactive = interactive
         self.drag_from_anywhere = drag_from_anywhere
+        self.ignore_event_outside = ignore_event_outside
 
         if drawtype == 'none':  # draw a line but make it invisible
             _api.warn_deprecated(
@@ -2565,6 +2566,7 @@ class RectangleSelector(_SelectorWidget):
         # call desired function
         self.onselect(self.eventpress, self.eventrelease)
         self.update()
+        self._completed = True
 
         return False
 
@@ -2592,6 +2594,10 @@ class RectangleSelector(_SelectorWidget):
 
         # new shape
         else:
+            # Don't create a new rectangle if there is already one when
+            # ignore_event_outside=True
+            if self.ignore_event_outside and self._completed:
+                return
             center = [self.eventpress.xdata, self.eventpress.ydata]
             center_pix = [self.eventpress.x, self.eventpress.y]
             dx = (event.xdata - center[0]) / 2.
