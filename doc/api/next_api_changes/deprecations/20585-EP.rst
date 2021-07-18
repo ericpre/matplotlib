@@ -1,9 +1,19 @@
 RectangleSelector and EllipseSelector
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The *maxdist* argument is deprecated, use *grab_range* instead.
+The *rectprops* argument is deprecated, use *props* instead.
 The *marker_props* argument is deprecated, use *handle_props* instead.
 
 PolygonSelector
 ~~~~~~~~~~~~~~~
 The *vertex_select_radius* argument is deprecated, use *grab_range* instead.
+The *lineprops* argument is deprecated, use *props* instead.
 The *markerprops* argument is deprecated, use *handle_props* instead.
+
+SpanSelector
+~~~~~~~~~~~~
+The *rectprops* argument is deprecated, use *props* instead.
+
+LassoSelector
+~~~~~~~~~~~~~
+The *lineprops* argument is deprecated, use *props* instead.
