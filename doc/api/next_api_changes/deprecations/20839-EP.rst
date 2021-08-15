@@ -1,0 +1,4 @@
+Selector widget state internals
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The *state_modifier_keys* attribute has been privatized and deprecated. Use
+*state_modifier_keys* argument when creating the selector instead.
