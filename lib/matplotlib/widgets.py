@@ -20,6 +20,7 @@ from matplotlib import docstring
 from . import _api, backend_tools, cbook, colors, ticker
 from .lines import Line2D
 from .patches import Circle, Rectangle, Ellipse
+from .transforms import Affine2D
 
 
 class LockDraw:
@@ -1797,7 +1798,8 @@ class _SelectorWidget(AxesWidget):
 
         self._state_modifier_keys = dict(move=' ', clear='escape',
                                          square='shift', center='control',
-                                         data_coordinates='d')
+                                         data_coordinates='d',
+                                         rotate='r')
         self._state_modifier_keys.update(state_modifier_keys or {})
 
         self.background = None
@@ -1933,8 +1935,9 @@ class _SelectorWidget(AxesWidget):
             key = event.key or ''
             key = key.replace('ctrl', 'control')
             # move state is locked in on a button press
-            if key == self._state_modifier_keys['move']:
-                self._state.add('move')
+            for action in ['move']:
+                if key == self._state_modifier_keys[action]:
+                    self._state.add(action)
             self._press(event)
             return True
         return False
@@ -1986,14 +1989,15 @@ class _SelectorWidget(AxesWidget):
                     artist.set_visible(False)
                 self.update()
                 return
-            if key == 'd' and key in self._state_modifier_keys.values():
-                modifier = 'data_coordinates'
-                if modifier in self._default_state:
-                    self._default_state.remove(modifier)
-                else:
-                    self.add_default_state(modifier)
+            for state in ['rotate', 'data_coordinates']:
+                if key == self._state_modifier_keys[state]:
+                    if state in self._default_state:
+                        self._default_state.remove(state)
+                    else:
+                        self.add_default_state(state)
             for (state, modifier) in self._state_modifier_keys.items():
-                if modifier in key:
+                # Multiple keys are string concatenated using '+'
+                if modifier in key.split('+'):
                     self._state.add(state)
             self._on_key_press(event)
 
@@ -2160,7 +2164,8 @@ class SpanSelector(_SelectorWidget):
             state_modifier_keys = dict(clear='escape',
                                        square='not-applicable',
                                        center='not-applicable',
-                                       data_coordinates='not-applicable')
+                                       data_coordinates='not-applicable',
+                                       rotate='not-applicable')
         super().__init__(ax, onselect, useblit=useblit, button=button,
                          state_modifier_keys=state_modifier_keys)
 
@@ -2723,6 +2728,7 @@ _RECTANGLESELECTOR_PARAMETERS_DOCSTRING = \
         - "center": change the shape around its center, default: "ctrl".
         - "data_coordinates": define if data or figure coordinates should be
           used to define the square shape, default: "d"
+        - "rotate": Rotate the shape around its center, default: "r".
 
         "square" and "center" can be combined. The square shape can be defined
         in data or figure coordinates as determined by the ``data_coordinates``
@@ -2770,8 +2776,6 @@ class RectangleSelector(_SelectorWidget):
     See also: :doc:`/gallery/widgets/rectangle_selector`
     """
 
-    _shape_klass = Rectangle
-
     @_api.rename_parameter("3.5", "maxdist", "grab_range")
     @_api.rename_parameter("3.5", "marker_props", "handle_props")
     @_api.rename_parameter("3.5", "rectprops", "props")
@@ -2791,6 +2795,7 @@ class RectangleSelector(_SelectorWidget):
         self._interactive = interactive
         self.drag_from_anywhere = drag_from_anywhere
         self.ignore_event_outside = ignore_event_outside
+        self._rotation = 0
 
         if drawtype == 'none':  # draw a line but make it invisible
             _api.warn_deprecated(
@@ -2808,8 +2813,7 @@ class RectangleSelector(_SelectorWidget):
             props['animated'] = self.useblit
             _props = props
             self.visible = _props.pop('visible', self.visible)
-            self._to_draw = self._shape_klass((0, 0), 0, 1, visible=False,
-                                              **_props)
+            self._to_draw = self._init_shape(**_props)
             self.ax.add_patch(self._to_draw)
         if drawtype == 'line':
             _api.warn_deprecated(
@@ -2877,6 +2881,10 @@ class RectangleSelector(_SelectorWidget):
     maxdist = _api.deprecated("3.5", name="maxdist", alternative="grab_range")(
         property(lambda self: self.grab_range,
                  lambda self, value: setattr(self, "grab_range", value)))
+
+    def _init_shape(self, **props):
+        return Rectangle((0, 0), 0, 1, visible=False,
+                         rotate_around_center=True, **props)
 
     def _press(self, event):
         """Button press event handler."""
@@ -2974,9 +2982,17 @@ class RectangleSelector(_SelectorWidget):
             refx = event.xdata / (self._eventpress.xdata + 1e-6)
             refy = event.ydata / (self._eventpress.ydata + 1e-6)
 
+
+        x0, x1, y0, y1 = self._extents_on_press
         # resize an existing shape
-        if self._active_handle and self._active_handle != 'C':
-            x0, x1, y0, y1 = self._extents_on_press
+        if 'rotate' in state and self._active_handle in self._corner_order:
+            # calculate angle abc
+            a = np.array([self._eventpress.xdata, self._eventpress.ydata])
+            b = np.array(self.center)
+            c = np.array([event.xdata, event.ydata])
+            self._rotation = (np.arctan2(c[1]-b[1], c[0]-b[0]) -
+                              np.arctan2(a[1]-b[1], a[0]-b[0]))
+        elif self._active_handle and self._active_handle != 'C':
             sizepress = [x1 - x0, y1 - y0]
             center = [x0 + sizepress[0] / 2, y0 + sizepress[1] / 2]
 
@@ -3041,6 +3057,7 @@ class RectangleSelector(_SelectorWidget):
 
         # new shape
         else:
+            self._rotation = 0
             # Don't create a new rectangle if there is already one when
             # ignore_event_outside=True
             if self.ignore_event_outside and self._selection_completed:
@@ -3075,16 +3092,15 @@ class RectangleSelector(_SelectorWidget):
     @property
     def _rect_bbox(self):
         if self._drawtype == 'box':
-            x0 = self._to_draw.get_x()
-            y0 = self._to_draw.get_y()
-            width = self._to_draw.get_width()
-            height = self._to_draw.get_height()
-            return x0, y0, width, height
+            return self._to_draw.get_bbox().bounds
         else:
             x, y = self._to_draw.get_data()
             x0, x1 = min(x), max(x)
             y0, y1 = min(y), max(y)
             return x0, y0, x1 - x0, y1 - y0
+
+    def _get_rotation_transform(self):
+        return Affine2D().rotate_around(*self.center, self._rotation)
 
     @property
     def corners(self):
@@ -3092,7 +3108,9 @@ class RectangleSelector(_SelectorWidget):
         x0, y0, width, height = self._rect_bbox
         xc = x0, x0 + width, x0 + width, x0
         yc = y0, y0, y0 + height, y0 + height
-        return xc, yc
+        transform = self._get_rotation_transform()
+        coords = transform.transform(np.array([xc, yc]).T).T
+        return coords[0], coords[1]
 
     @property
     def edge_centers(self):
@@ -3102,7 +3120,9 @@ class RectangleSelector(_SelectorWidget):
         h = height / 2.
         xe = x0, x0 + w, x0 + width, x0 + w
         ye = y0 + h, y0, y0 + h, y0 + height
-        return xe, ye
+        transform = self._get_rotation_transform()
+        coords = transform.transform(np.array([xe, ye]).T).T
+        return coords[0], coords[1]
 
     @property
     def center(self):
@@ -3112,7 +3132,10 @@ class RectangleSelector(_SelectorWidget):
 
     @property
     def extents(self):
-        """Return (xmin, xmax, ymin, ymax)."""
+        """
+        Return (xmin, xmax, ymin, ymax) as defined by the bounding box before
+        rotation.
+        """
         x0, y0, width, height = self._rect_bbox
         xmin, xmax = sorted([x0, x0 + width])
         ymin, ymax = sorted([y0, y0 + height])
@@ -3128,6 +3151,17 @@ class RectangleSelector(_SelectorWidget):
         self._center_handle.set_data(*self.center)
         self.set_visible(self.visible)
         self.update()
+
+    @property
+    def rotation(self):
+        """Rotation in degree."""
+        return np.rad2deg(self._rotation)
+
+    @rotation.setter
+    def rotation(self, value):
+        self._rotation = np.deg2rad(value)
+        # call extents setter to draw shape and update handles positions
+        self.extents = self.extents
 
     draw_shape = _api.deprecate_privatize_attribute('3.5')
 
@@ -3148,6 +3182,7 @@ class RectangleSelector(_SelectorWidget):
             self._to_draw.set_y(ymin)
             self._to_draw.set_width(xmax - xmin)
             self._to_draw.set_height(ymax - ymin)
+            self._to_draw.set_angle(self.rotation)
 
         elif self._drawtype == 'line':
             self._to_draw.set_data([xmin, xmax], [ymin, ymax])
@@ -3220,8 +3255,10 @@ class EllipseSelector(RectangleSelector):
     :doc:`/gallery/widgets/rectangle_selector`
     """
 
-    _shape_klass = Ellipse
     draw_shape = _api.deprecate_privatize_attribute('3.5')
+
+    def _init_shape(self, **props):
+        return Ellipse((0, 0), 0, 1, visible=False, **props)
 
     def _draw_shape(self, extents):
         x0, x1, y0, y1 = extents
@@ -3235,6 +3272,7 @@ class EllipseSelector(RectangleSelector):
             self._to_draw.center = center
             self._to_draw.width = 2 * a
             self._to_draw.height = 2 * b
+            self._to_draw.set_angle(self.rotation)
         else:
             rad = np.deg2rad(np.arange(31) * 12)
             x = a * np.cos(rad) + center[0]
@@ -3412,7 +3450,8 @@ class PolygonSelector(_SelectorWidget):
                                    move_all='shift', move='not-applicable',
                                    square='not-applicable',
                                    center='not-applicable',
-                                   data_coordinates='not-applicable')
+                                   data_coordinates='not-applicable',
+                                   rotate='not-applicable')
         super().__init__(ax, onselect, useblit=useblit,
                          state_modifier_keys=state_modifier_keys)
 
