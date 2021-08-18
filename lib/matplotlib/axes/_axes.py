@@ -8090,3 +8090,10 @@ such objects
     tricontourf = mtri.tricontourf
     tripcolor = mtri.tripcolor
     triplot = mtri.triplot
+
+    def _get_aspect_ratio(self):
+        """Convenience method to calculate aspect ratio of the axes."""
+        figure_size = self.get_figure().get_size_inches()
+        ll, ur = self.get_position() * figure_size
+        width, height = ur - ll
+        return height / width * self.get_data_ratio()

@@ -1934,9 +1934,8 @@ class _SelectorWidget(AxesWidget):
             key = event.key or ''
             key = key.replace('ctrl', 'control')
             # move state is locked in on a button press
-            for state in ['move']:
-                if key == self._state_modifier_keys[state]:
-                    self._state.add(state)
+            if key == self._state_modifier_keys['move']:
+                self._state.add('move')
             self._press(event)
             return True
         return False
@@ -1987,14 +1986,10 @@ class _SelectorWidget(AxesWidget):
                 self.clear()
                 return
             for (state, modifier) in self._state_modifier_keys.items():
-                if modifier in key.split('+'):
-                    # rotate and data_coordinates are enable/disable
-                    # on key press
-                    if (state in ['rotate', 'data_coordinates'] and
-                            state in self._state):
-                        self._state.discard(state)
-                    else:
-                        self._state.add(state)
+                # 'rotate' and 'data_coordinates' are added in _default_state
+                if (modifier in key.split('+') and
+                        state not in ['rotate', 'data_coordinates']):
+                    self._state.add(state)
             self._on_key_press(event)
 
     def _on_key_press(self, event):
@@ -2004,9 +1999,9 @@ class _SelectorWidget(AxesWidget):
         """Key release event handler and validator."""
         if self.active:
             key = event.key or ''
+            key = key.replace('ctrl', 'control')
             for (state, modifier) in self._state_modifier_keys.items():
-                if (modifier in key.split('+') and
-                        state not in ['rotate', 'data_coordinates']):
+                if modifier in key.split('+'):
                     self._state.discard(state)
             self._on_key_release(event)
 
@@ -2841,7 +2836,8 @@ class RectangleSelector(_SelectorWidget):
         self._interactive = interactive
         self.drag_from_anywhere = drag_from_anywhere
         self.ignore_event_outside = ignore_event_outside
-        self._rotation = 0
+        self._rotation = 0.0
+        self._aspect_ratio_correction = 1.0
 
         if drawtype == 'none':  # draw a line but make it invisible
             _api.warn_deprecated(
@@ -2875,6 +2871,7 @@ class RectangleSelector(_SelectorWidget):
             self.ax.add_line(to_draw)
 
         self._selection_artist = to_draw
+        self._set_aspect_ratio_correction()
 
         self.minspanx = minspanx
         self.minspany = minspany
@@ -2958,6 +2955,8 @@ class RectangleSelector(_SelectorWidget):
             self.set_visible(True)
 
         self._extents_on_press = self.extents
+        self._rotation_on_press = self._rotation
+        self._set_aspect_ratio_correction()
 
         return False
 
@@ -3033,13 +3032,8 @@ class RectangleSelector(_SelectorWidget):
         dy = event.ydata - eventpress.ydata
         refmax = None
         if 'data_coordinates' in state:
-            aspect_ratio = 1
             refx, refy = dx, dy
         else:
-            figure_size = self.ax.get_figure().get_size_inches()
-            ll, ur = self.ax.get_position() * figure_size
-            width, height = ur - ll
-            aspect_ratio = height / width * self.ax.get_data_ratio()
             refx = event.xdata / (eventpress.xdata + 1e-6)
             refy = event.ydata / (eventpress.ydata + 1e-6)
 
@@ -3050,8 +3044,9 @@ class RectangleSelector(_SelectorWidget):
             a = np.array([eventpress.xdata, eventpress.ydata])
             b = np.array(self.center)
             c = np.array([event.xdata, event.ydata])
-            self._rotation = (np.arctan2(c[1]-b[1], c[0]-b[0]) -
-                              np.arctan2(a[1]-b[1], a[0]-b[0]))
+            angle = (np.arctan2(c[1]-b[1], c[0]-b[0]) -
+                     np.arctan2(a[1]-b[1], a[0]-b[0]))
+            self.rotation = np.rad2deg(self._rotation_on_press + angle)
 
         # resize an existing shape
         elif self._active_handle and self._active_handle != 'C':
@@ -3066,10 +3061,10 @@ class RectangleSelector(_SelectorWidget):
                         refmax = max(refx, refy, key=abs)
                     if self._active_handle in ['E', 'W'] or refmax == refx:
                         dw = event.xdata - center[0]
-                        dh = dw / aspect_ratio
+                        dh = dw / self._aspect_ratio_correction
                     else:
                         dh = event.ydata - center[1]
-                        dw = dh * aspect_ratio
+                        dw = dh * self._aspect_ratio_correction
                 else:
                     dw = sizepress[0] / 2
                     dh = sizepress[1] / 2
@@ -3102,10 +3097,12 @@ class RectangleSelector(_SelectorWidget):
                         refmax = max(refx, refy, key=abs)
                     if self._active_handle in ['E', 'W'] or refmax == refx:
                         sign = np.sign(event.ydata - y0)
-                        y1 = y0 + sign * abs(x1 - x0) / aspect_ratio
+                        y1 = y0 + sign * abs(x1 - x0) / \
+                            self._aspect_ratio_correction
                     else:
                         sign = np.sign(event.xdata - x0)
-                        x1 = x0 + sign * abs(y1 - y0) * aspect_ratio
+                        x1 = x0 + sign * abs(y1 - y0) * \
+                            self._aspect_ratio_correction
 
         # move existing shape
         elif self._active_handle == 'C':
@@ -3132,9 +3129,9 @@ class RectangleSelector(_SelectorWidget):
             if 'square' in state:
                 refmax = max(refx, refy, key=abs)
                 if refmax == refx:
-                    dy = dx / aspect_ratio
+                    dy = np.sign(dy) * abs(dx) / self._aspect_ratio_correction
                 else:
-                    dx = dy * aspect_ratio
+                    dx = np.sign(dx) * abs(dy) * self._aspect_ratio_correction
 
             # from center
             if 'center' in state:
@@ -3151,6 +3148,18 @@ class RectangleSelector(_SelectorWidget):
 
         self.extents = x0, x1, y0, y1
 
+    def _on_key_press(self, event):
+        key = event.key or ''
+        key = key.replace('ctrl', 'control')
+        for (state, modifier) in self._state_modifier_keys.items():
+            if modifier in key.split('+'):
+                if state in ['rotate', 'data_coordinates']:
+                    if state in self._default_state:
+                        self._default_state.discard(state)
+                    else:
+                        self._default_state.add(state)
+                    self._set_aspect_ratio_correction()
+
     @property
     def _rect_bbox(self):
         if self._drawtype == 'box':
@@ -3161,8 +3170,27 @@ class RectangleSelector(_SelectorWidget):
             y0, y1 = min(y), max(y)
             return x0, y0, x1 - x0, y1 - y0
 
+    def _set_aspect_ratio_correction(self):
+        aspect_ratio = self.ax._get_aspect_ratio()
+        if not hasattr(self._selection_artist, '_aspect_ratio_correction'):
+            # Aspect ratio correction is not supported with deprecated
+            # drawtype='line'. Remove this block in matplotlib 3.7
+            self._aspect_ratio_correction = 1
+            return
+
+        self._selection_artist._aspect_ratio_correction = aspect_ratio
+        if 'data_coordinates' in self._state | self._default_state:
+            self._aspect_ratio_correction = 1
+        else:
+            self._aspect_ratio_correction = aspect_ratio
+
     def _get_rotation_transform(self):
-        return Affine2D().rotate_around(*self.center, self._rotation)
+        aspect_ratio = self.ax._get_aspect_ratio()
+        return Affine2D().translate(-self.center[0], -self.center[1]) \
+                .scale(1, aspect_ratio) \
+                .rotate(self._rotation) \
+                .scale(1, 1 / aspect_ratio) \
+                .translate(*self.center)
 
     @property
     def corners(self):
@@ -3217,14 +3245,17 @@ class RectangleSelector(_SelectorWidget):
 
     @property
     def rotation(self):
-        """Rotation in degree."""
+        """Rotation in degree in interval [0, 45]."""
         return np.rad2deg(self._rotation)
 
     @rotation.setter
     def rotation(self, value):
-        self._rotation = np.deg2rad(value)
-        # call extents setter to draw shape and update handles positions
-        self.extents = self.extents
+        # Restrict to a limited range of rotation [0, 45] to avoid changing
+        # order of handles
+        if 0 <= value and value <= 45:
+            self._rotation = np.deg2rad(value)
+            # call extents setter to draw shape and update handles positions
+            self.extents = self.extents
 
     draw_shape = _api.deprecate_privatize_attribute('3.5')
 
@@ -3335,7 +3366,7 @@ class EllipseSelector(RectangleSelector):
             self._selection_artist.center = center
             self._selection_artist.width = 2 * a
             self._selection_artist.height = 2 * b
-            self._selection_artist.set_angle(self.rotation)
+            self._selection_artist.angle = self.rotation
         else:
             rad = np.deg2rad(np.arange(31) * 12)
             x = a * np.cos(rad) + center[0]
