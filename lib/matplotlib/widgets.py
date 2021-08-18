@@ -2090,6 +2090,7 @@ class _SelectorWidget(AxesWidget):
                              f'following: {keys}.')
         self._default_state.add(value)
 
+
 class SpanSelector(_SelectorWidget):
     """
     Visually select a min/max range on a single axis and call a function with
