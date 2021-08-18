@@ -393,13 +393,19 @@ def test_rectangle_rotate(selector_class):
     do_event(tool, 'onmove', xdata=130, ydata=140)
     do_event(tool, 'release', xdata=130, ydata=140)
     assert tool.extents == (100, 130, 100, 140)
+    assert len(tool._default_state) == 0
+    assert len(tool._state) == 0
 
     # Rotate anticlockwise using top-right corner
     do_event(tool, 'on_key_press', key='r')
+    assert tool._default_state == set(['rotate'])
+    assert len(tool._state) == 0
     do_event(tool, 'press', xdata=130, ydata=140)
     do_event(tool, 'onmove', xdata=110, ydata=145)
     do_event(tool, 'release', xdata=110, ydata=145)
     do_event(tool, 'on_key_press', key='r')
+    assert len(tool._default_state) == 0
+    assert len(tool._state) == 0
     # Extents shouldn't change (as shape of rectangle hasn't changed)
     assert tool.extents == (100, 130, 100, 140)
     # Corners should move
@@ -436,7 +442,7 @@ def test_rectangle_resize_square_center_aspect():
     xdata_new, ydata_new = xdata + xdiff, ydata
     _resize_rectangle(tool, xdata, ydata, xdata_new, ydata_new)
     assert_allclose(tool.extents, [extents[0] - xdiff, xdata_new,
-                                   46.25, 133.75])
+                                   55, 125])
 
     # use data coordinates
     do_event(tool, 'on_key_press', key='d')
