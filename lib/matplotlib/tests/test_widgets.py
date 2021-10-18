@@ -562,24 +562,28 @@ def test_rectangle_handles():
     assert_allclose(tool.edge_centers,
                     ((100, 125.0, 150, 125.0), (125.0, 100, 125.0, 150)))
     assert tool.extents == (100, 150, 100, 150)
+    assert tool._extents_on_press is None
 
     # grab a corner and move it
     do_event(tool, 'press', xdata=100, ydata=100)
     do_event(tool, 'onmove', xdata=120, ydata=120)
     do_event(tool, 'release', xdata=120, ydata=120)
     assert tool.extents == (120, 150, 120, 150)
+    assert tool._extents_on_press is None
 
     # grab the center and move it
     do_event(tool, 'press', xdata=132, ydata=132)
     do_event(tool, 'onmove', xdata=120, ydata=120)
     do_event(tool, 'release', xdata=120, ydata=120)
     assert tool.extents == (108, 138, 108, 138)
+    assert tool._extents_on_press is None
 
     # create a new rectangle
     do_event(tool, 'press', xdata=10, ydata=10)
     do_event(tool, 'onmove', xdata=100, ydata=100)
     do_event(tool, 'release', xdata=100, ydata=100)
     assert tool.extents == (10, 100, 10, 100)
+    assert tool._extents_on_press is None
 
     # Check that marker_props worked.
     assert mcolors.same_color(
@@ -604,6 +608,7 @@ def test_rectangle_selector_onselect(interactive):
 
     assert tool.ax._got_onselect
     assert tool.extents == (100.0, 150.0, 110.0, 120.0)
+    assert tool._extents_on_press is None
 
     # Reset tool.ax._got_onselect
     tool.ax._got_onselect = False
@@ -628,6 +633,8 @@ def test_rectangle_selector_ignore_outside(ignore_event_outside):
 
     assert tool.ax._got_onselect
     assert tool.extents == (100.0, 150.0, 110.0, 120.0)
+    assert tool._active_handle is None
+    assert tool._extents_on_press is None
 
     # Reset
     ax._got_onselect = False
@@ -639,10 +646,46 @@ def test_rectangle_selector_ignore_outside(ignore_event_outside):
         # event have been ignored and span haven't changed.
         assert not ax._got_onselect
         assert tool.extents == (100.0, 150.0, 110.0, 120.0)
+        assert tool._active_handle is None
+        assert tool._extents_on_press is None
     else:
         # A new shape is created
         assert ax._got_onselect
         assert tool.extents == (150.0, 160.0, 150.0, 160.0)
+        assert tool._active_handle is None
+        assert tool._extents_on_press is None
+
+
+def test_line2d_selector():
+    ax = get_ax()
+    def onselect(vmin, vmax):
+        ax._got_onselect = True
+
+    tool = widgets.Line2DSelector(ax, onselect, interactive=True)
+    do_event(tool, 'press', xdata=100, ydata=110, button=1)
+    do_event(tool, 'onmove', xdata=150, ydata=120, button=1)
+    do_event(tool, 'release', xdata=150, ydata=120, button=1)
+
+    assert tool.ax._got_onselect
+    assert tool.extents == (100.0, 150.0, 110.0, 120.0)
+    assert tool._active_handle is None
+    assert tool._extents_on_press is None
+
+    # Move the end handle and check order of extents
+    do_event(tool, 'press', xdata=150, ydata=120, button=1)
+    do_event(tool, 'onmove', xdata=50, ydata=150, button=1)
+    do_event(tool, 'release', xdata=50, ydata=150, button=1)
+    assert tool.extents == (100.0, 50.0, 110.0, 150.0)
+    assert tool._active_handle is None
+    assert tool._extents_on_press is None
+
+    x_shift = 20
+    do_event(tool, 'press', xdata=75, ydata=130, button=1)
+    do_event(tool, 'onmove', xdata=75+x_shift, ydata=130, button=1)
+    do_event(tool, 'release', xdata=75+x_shift, ydata=150, button=1)
+    assert tool.extents == (100.0+x_shift, 50.0+x_shift, 110.0, 150.0)
+    assert tool._active_handle is None
+    assert tool._extents_on_press is None
 
 
 def check_span(*args, **kwargs):

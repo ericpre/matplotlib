@@ -2889,22 +2889,38 @@ class RectangleSelector(_SelectorWidget):
                     'edgecolor', 'black'),
                 **cbook.normalize_kwargs(handle_props, Line2D)}
 
-            self._corner_order = ['SW', 'SE', 'NE', 'NW']
-            xc, yc = self.corners
-            self._corner_handles = ToolHandles(self.ax, xc, yc,
-                                               marker_props=self._handle_props,
-                                               useblit=self.useblit)
-
-            self._edge_order = ['W', 'S', 'E', 'N']
-            xe, ye = self.edge_centers
-            self._edge_handles = ToolHandles(self.ax, xe, ye, marker='s',
-                                             marker_props=self._handle_props,
-                                             useblit=self.useblit)
-
             xc, yc = self.center
-            self._center_handle = ToolHandles(self.ax, [xc], [yc], marker='s',
-                                              marker_props=self._handle_props,
-                                              useblit=self.useblit)
+            self._center_handle = ToolHandles(
+                self.ax, [xc], [yc], marker='s',
+                marker_props=self._handle_props,
+                useblit=self.useblit)
+
+            if self._drawtype == 'box':
+                self._corner_order = ['SW', 'SE', 'NE', 'NW']
+                xc, yc = self.corners
+                self._corner_handles = ToolHandles(
+                    self.ax, xc, yc,
+                    marker_props=self._handle_props,
+                    useblit=self.useblit
+                    )
+
+                self._edge_order = ['W', 'S', 'E', 'N']
+                xe, ye = self.edge_centers
+                self._edge_handles = ToolHandles(
+                    self.ax, xe, ye, marker='s',
+                    marker_props=self._handle_props,
+                    useblit=self.useblit
+                    )
+
+            else:
+                self._corner_order = ['Start', 'End']
+                xc, yc = self.ends
+                self._corner_handles = ToolHandles(
+                    self.ax, xc, yc,
+                    marker_props=self._handle_props,
+                    useblit=self.useblit
+                    )
+                self._edge_handles = None
 
             self._active_handle = None
 
@@ -2968,6 +2984,7 @@ class RectangleSelector(_SelectorWidget):
 
         if (self._active_handle is None and self._selection_completed and
                 self.ignore_event_outside):
+            self._extents_on_press = None
             return
 
         # update the eventpress and eventrelease with the resulting extents
@@ -3051,59 +3068,65 @@ class RectangleSelector(_SelectorWidget):
 
         # resize an existing shape
         elif self._active_handle and self._active_handle != 'C':
-            sizepress = [x1 - x0, y1 - y0]
-            center = [x0 + sizepress[0] / 2, y0 + sizepress[1] / 2]
-
-            # from center
-            if 'center' in state:
-                if 'square' in state:
-                    # when using a corner, find which reference to use
-                    if self._active_handle in self._corner_order:
-                        refmax = max(refx, refy, key=abs)
-                    if self._active_handle in ['E', 'W'] or refmax == refx:
-                        dw = event.xdata - center[0]
-                        dh = dw / self._aspect_ratio_correction
-                    else:
-                        dh = event.ydata - center[1]
-                        dw = dh * self._aspect_ratio_correction
-                else:
-                    dw = sizepress[0] / 2
-                    dh = sizepress[1] / 2
-                    # cancel changes in perpendicular direction
-                    if self._active_handle in ['E', 'W'] + self._corner_order:
-                        dw = abs(event.xdata - center[0])
-                    if self._active_handle in ['N', 'S'] + self._corner_order:
-                        dh = abs(event.ydata - center[1])
-
-                x0, x1, y0, y1 = (center[0] - dw, center[0] + dw,
-                                  center[1] - dh, center[1] + dh)
-
+            # For Line2DSelector
+            if self._active_handle == 'Start':
+                x0, y0 = event.xdata, event.ydata
+            elif self._active_handle == 'End':
+                x1, y1 = event.xdata, event.ydata
             else:
-                # change sign of relative changes to simplify calculation
-                # Switch variables so that x1 and/or y1 are updated on move
-                x_factor = y_factor = 1
-                if 'W' in self._active_handle:
-                    x0 = x1
-                    x_factor *= -1
-                if 'S' in self._active_handle:
-                    y0 = y1
-                    y_factor *= -1
-                if self._active_handle in ['E', 'W'] + self._corner_order:
-                    x1 = event.xdata
-                if self._active_handle in ['N', 'S'] + self._corner_order:
-                    y1 = event.ydata
-                if 'square' in state:
-                    # when using a corner, find which reference to use
-                    if self._active_handle in self._corner_order:
-                        refmax = max(refx, refy, key=abs)
-                    if self._active_handle in ['E', 'W'] or refmax == refx:
-                        sign = np.sign(event.ydata - y0)
-                        y1 = y0 + sign * abs(x1 - x0) / \
-                            self._aspect_ratio_correction
-                    else:
-                        sign = np.sign(event.xdata - x0)
-                        x1 = x0 + sign * abs(y1 - y0) * \
-                            self._aspect_ratio_correction
+                sizepress = [x1 - x0, y1 - y0]
+                center = [x0 + sizepress[0] / 2, y0 + sizepress[1] / 2]
+
+                # from center
+                if 'center' in state:
+	                if 'square' in state:
+	                    # when using a corner, find which reference to use
+	                    if self._active_handle in self._corner_order:
+	                        refmax = max(refx, refy, key=abs)
+	                    if self._active_handle in ['E', 'W'] or refmax == refx:
+	                        dw = event.xdata - center[0]
+	                        dh = dw / self._aspect_ratio_correction
+	                    else:
+	                        dh = event.ydata - center[1]
+	                        dw = dh * self._aspect_ratio_correction
+	                else:
+	                    dw = sizepress[0] / 2
+	                    dh = sizepress[1] / 2
+	                    # cancel changes in perpendicular direction
+	                    if self._active_handle in ['E', 'W'] + self._corner_order:
+	                        dw = abs(event.xdata - center[0])
+	                    if self._active_handle in ['N', 'S'] + self._corner_order:
+	                        dh = abs(event.ydata - center[1])
+
+	                x0, x1, y0, y1 = (center[0] - dw, center[0] + dw,
+	                                  center[1] - dh, center[1] + dh)
+
+                else:
+                    # change sign of relative changes to simplify calculation
+                    # Switch variables so that x1 and/or y1 are updated on move
+                    x_factor = y_factor = 1
+                    if 'W' in self._active_handle:
+                        x0 = x1
+                        x_factor *= -1
+                    if 'S' in self._active_handle:
+                        y0 = y1
+                        y_factor *= -1
+                    if self._active_handle in ['E', 'W'] + self._corner_order:
+                        x1 = event.xdata
+                    if self._active_handle in ['N', 'S'] + self._corner_order:
+                        y1 = event.ydata
+                    if 'square' in state:
+                        # when using a corner, find which reference to use
+                        if self._active_handle in self._corner_order:
+                            refmax = max(refx, refy, key=abs)
+                        if self._active_handle in ['E', 'W'] or refmax == refx:
+                            sign = np.sign(event.ydata - y0)
+                            y1 = y0 + sign * abs(x1 - x0) / \
+                                self._aspect_ratio_correction
+                        else:
+                            sign = np.sign(event.xdata - x0)
+                            x1 = x0 + sign * abs(y1 - y0) * \
+                                self._aspect_ratio_correction
 
         # move existing shape
         elif self._active_handle == 'C':
@@ -3386,6 +3409,94 @@ class EllipseSelector(RectangleSelector):
             x0, x1 = min(x), max(x)
             y0, y1 = min(y), max(y)
             return x0, y0, x1 - x0, y1 - y0
+
+
+@docstring.Substitution(_RECTANGLESELECTOR_PARAMETERS_DOCSTRING.replace(
+    '__ARTIST_NAME__', 'line'))
+class Line2DSelector(RectangleSelector):
+    """
+    Select an line region of an axes.
+
+    For the cursor to remain responsive you must keep a reference to it.
+
+    Press and release events triggered at the same coordinates outside the
+    selection will clear the selector, except when
+    ``ignore_event_outside=True``.
+
+    %s
+
+    Examples
+    --------
+    :doc:`/gallery/widgets/rectangle_selector`
+    """
+
+    _shape_klass = Line2D
+
+    def __init__(self, ax, onselect, **kwargs):
+        super().__init__(ax, onselect,  drawtype='line', **kwargs)
+
+    def _draw_shape(self, extents):
+        self._selection_artist.set_data(extents[:2], extents[2:])
+
+    @property
+    def _handles_artists(self):
+        return (*self._center_handle.artists, *self._corner_handles.artists)
+
+    @property
+    def ends(self):
+        """Ends of the line"""
+        xc = self.extents[:2]
+        yc = self.extents[2:]
+        return xc, yc
+
+    def _contains(self, event):
+        """Return True if event is within the patch."""
+        return self._selection_artist.contains(event)[0]
+
+    @property
+    def extents(self):
+        """Return (xmin, xmax, ymin, ymax)."""
+        (x0, x1), (y0, y1) = self._selection_artist.get_data()
+        return x0, x1, y0, y1
+
+    @extents.setter
+    def extents(self, extents):
+        # Update displayed shape
+        self._draw_shape(extents)
+        if self._interactive:
+            # Update displayed handles
+            self._corner_handles.set_data(*self.ends)
+            self._center_handle.set_data(*self.center)
+        self.set_visible(self.visible)
+        self.update()
+
+    def _set_active_handle(self, event):
+        """Set active handle based on the location of the mouse event."""
+        # Note: event.xdata/ydata in data coordinates, event.x/y in pixels
+        c_idx, c_dist = self._corner_handles.closest(event.x, event.y)
+        m_idx, m_dist = self._center_handle.closest(event.x, event.y)
+
+        if 'move' in self._state:
+            self._active_handle = 'C'
+            self._extents_on_press = self.extents
+        # Set active handle as closest handle, if mouse click is close enough.
+        elif m_dist < self.grab_range * 2:
+            # Prioritise center handle over other handles
+            self._active_handle = 'C'
+        elif c_dist > self.grab_range:
+            # Not close to any handles
+            if self.drag_from_anywhere and self._contains(event):
+                # Check if we've clicked inside the region
+                self._active_handle = 'C'
+                self._extents_on_press = self.extents
+            else:
+                self._active_handle = None
+                return
+        else:
+            # Closest to a corner handle
+            self._active_handle = self._corner_order[c_idx]
+
+        self._extents_on_press = self.extents
 
 
 class LassoSelector(_SelectorWidget):
