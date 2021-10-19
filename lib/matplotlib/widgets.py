@@ -2884,44 +2884,23 @@ class RectangleSelector(_SelectorWidget):
         self.grab_range = grab_range
 
         if self._interactive:
+            # All private attributes used in interactive mode
+            # Initialisation of subclass will populate them
+            self._center_handle = None
+            self._corner_order = []
+            self._corner_handles = None
+            self._edge_order = []
+            self._edge_handles = None
+            # Line2DSelector
+            self._end_order = []
+            self._end_handles = None
+
             self._handle_props = {
                 'markeredgecolor': (self._props or {}).get(
                     'edgecolor', 'black'),
                 **cbook.normalize_kwargs(handle_props, Line2D)}
 
-            xc, yc = self.center
-            self._center_handle = ToolHandles(
-                self.ax, [xc], [yc], marker='s',
-                marker_props=self._handle_props,
-                useblit=self.useblit)
-
-            if self._drawtype == 'box':
-                self._corner_order = ['SW', 'SE', 'NE', 'NW']
-                xc, yc = self.corners
-                self._corner_handles = ToolHandles(
-                    self.ax, xc, yc,
-                    marker_props=self._handle_props,
-                    useblit=self.useblit
-                    )
-
-                self._edge_order = ['W', 'S', 'E', 'N']
-                xe, ye = self.edge_centers
-                self._edge_handles = ToolHandles(
-                    self.ax, xe, ye, marker='s',
-                    marker_props=self._handle_props,
-                    useblit=self.useblit
-                    )
-
-            else:
-                self._corner_order = ['Start', 'End']
-                xc, yc = self.ends
-                self._corner_handles = ToolHandles(
-                    self.ax, xc, yc,
-                    marker_props=self._handle_props,
-                    useblit=self.useblit
-                    )
-                self._edge_handles = None
-
+            self._init_interactive()
             self._active_handle = None
 
         self._extents_on_press = None
@@ -2948,6 +2927,29 @@ class RectangleSelector(_SelectorWidget):
     def _init_shape(self, **props):
         return Rectangle((0, 0), 0, 1, visible=False,
                          rotation_point='center', **props)
+
+    def _init_interactive(self):
+        xc, yc = self.center
+        self._center_handle = ToolHandles(
+            self.ax, [xc], [yc], marker='s',
+            marker_props=self._handle_props,
+            useblit=self.useblit)
+
+        self._corner_order = ['SW', 'SE', 'NE', 'NW']
+        xc, yc = self.corners
+        self._corner_handles = ToolHandles(
+            self.ax, xc, yc,
+            marker_props=self._handle_props,
+            useblit=self.useblit
+            )
+
+        self._edge_order = ['W', 'S', 'E', 'N']
+        xe, ye = self.edge_centers
+        self._edge_handles = ToolHandles(
+            self.ax, xe, ye, marker='s',
+            marker_props=self._handle_props,
+            useblit=self.useblit
+            )
 
     def _press(self, event):
         """Button press event handler."""
@@ -3017,10 +3019,10 @@ class RectangleSelector(_SelectorWidget):
                 artist.set_visible(False)
             if self._selection_completed:
                 # Call onselect, only when the selection is already existing
-                self.onselect(self._eventpress, self._eventrelease)
+                self.onselect(*self.extents)
             self._selection_completed = False
         else:
-            self.onselect(self._eventpress, self._eventrelease)
+            self.onselect(*self.extents)
             self._selection_completed = True
 
         self.update()
@@ -3054,6 +3056,16 @@ class RectangleSelector(_SelectorWidget):
         else:
             refx = event.xdata / (eventpress.xdata + 1e-6)
             refy = event.ydata / (eventpress.ydata + 1e-6)
+
+        # For Line2DSelector
+        if self._active_handle == 'Width':
+            # Calculate the change in width; setting linewidth will update
+            # the shape
+            sign = np.sign(
+                np.dot(self._widthvector_on_press, np.array([dx, dy])))
+            dl = sign * np.sqrt(dx**2 + dy**2)
+            self.linewidth = self._linewidth_on_press + dl * 2
+            return
 
         x0, x1, y0, y1 = self._extents_on_press
         # rotate an existing shape
@@ -3208,13 +3220,28 @@ class RectangleSelector(_SelectorWidget):
         else:
             self._aspect_ratio_correction = aspect_ratio
 
-    def _get_rotation_transform(self):
+    def _get_rotation_transform(self, rotation_point=None, angle=None):
+        """
+        Convenient method to get the rotation transform of the patch
+
+        Parameters
+        ----------
+        center : 2-tuple of float, default: None
+            The rotation point. If None, the center of the patch is used.
+        angle : float, default: None
+            The angle of the rotation in radian. If None, the current
+            rotation of the patch is used.
+        """
         aspect_ratio = self.ax._get_aspect_ratio()
-        return Affine2D().translate(-self.center[0], -self.center[1]) \
+        if rotation_point is None:
+            rotation_point = self._center_rect_bbox
+        if angle is None:
+            angle = self._rotation
+        return Affine2D().translate(-rotation_point[0], -rotation_point[1]) \
                 .scale(1, aspect_ratio) \
-                .rotate(self._rotation) \
+                .rotate(angle) \
                 .scale(1, 1 / aspect_ratio) \
-                .translate(*self.center)
+                .translate(*rotation_point)
 
     @property
     def corners(self):
@@ -3239,10 +3266,17 @@ class RectangleSelector(_SelectorWidget):
         return coords[0], coords[1]
 
     @property
-    def center(self):
+    def _center_rect_bbox(self):
         """Center of rectangle."""
         x0, y0, width, height = self._rect_bbox
         return x0 + width / 2., y0 + height / 2.
+
+    @property
+    def center(self):
+        xc, yc = self._center_rect_bbox
+        transform = self._get_rotation_transform()
+        coords = transform.transform(np.array([xc, yc]).T).T
+        return coords[0], coords[1]
 
     @property
     def extents(self):
@@ -3429,61 +3463,118 @@ class Line2DSelector(RectangleSelector):
     --------
     :doc:`/gallery/widgets/rectangle_selector`
     """
+    _start = (0., 0.)
+    _end = (0., 0.)
+    _linewidth = 0.
 
-    _shape_klass = Line2D
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._min_linewidth = kwargs.get('min_linewidth', 0.)
 
-    def __init__(self, ax, onselect, **kwargs):
-        super().__init__(ax, onselect,  drawtype='line', **kwargs)
+    def _init_shape(self, **props):
+        return Rectangle((0, 0), 0, 1, visible=False,
+                         rotation_point='xy', **props)
+
+    def _init_interactive(self):
+        self._end_order = ['Start', 'End']
+        xc, yc = self.extents[:2], self.extents[2:]
+        self._end_handles = ToolHandles(
+            self.ax, xc, yc,
+            marker_props=self._handle_props,
+            useblit=self.useblit
+            )
+
+        self._edge_order = ['Width']
+        xe, ye = self.edge_centers
+        self._edge_handles = ToolHandles(
+            self.ax, xe, ye, marker='s',
+            marker_props=self._handle_props,
+            useblit=self.useblit
+            )
 
     def _draw_shape(self, extents):
-        self._selection_artist.set_data(extents[:2], extents[2:])
+        x0, x1, y0, y1 = extents
+        self._selection_artist.set_xy((x0, y0 - self.linewidth / 2.))
+        self._selection_artist.set_width(self.length)
+        self._selection_artist.set_height(self.linewidth)
+        self._selection_artist.set_angle(self.angle)
+        self._selection_artist.rotation_point = self._start
+        if self._interactive:
+            # Update displayed handles
+            self._end_handles.set_data([extents[:2], extents[2:]])
+            self._edge_handles.set_data(*self.edge_centers)
 
     @property
     def _handles_artists(self):
-        return (*self._center_handle.artists, *self._corner_handles.artists)
+        return (*self._edge_handles.artists, *self._end_handles.artists)
 
     @property
-    def ends(self):
+    def start(self):
+        return self._start
+
+    @property
+    def end(self):
         """Ends of the line"""
-        xc = self.extents[:2]
-        yc = self.extents[2:]
-        return xc, yc
+        return self._end
+
+    @property
+    def center(self):
+        """Center of the rectangle"""
+        x0, y0 = self._start
+        xc, yc = x0 + self.length / 2., y0
+        transform = self._get_rotation_transform(rotation_point=self._start,
+                                                 angle=np.deg2rad(self.angle))
+        coords = transform.transform(np.array([xc, yc]).T).T
+        return (coords[0], ), (coords[1], )
+
+    @property
+    def edge_centers(self):
+        """Midpoint of one edge of the rectangle"""
+        x0, y0 = self._start
+        xe, ye = x0 + self.length / 2., y0 + self.linewidth / 2.
+        transform = self._get_rotation_transform(rotation_point=self._start,
+                                                 angle=np.deg2rad(self.angle))
+        coords = transform.transform(np.array([xe, ye]).T).T
+        return (coords[0], ), (coords[1], )
 
     def _contains(self, event):
         """Return True if event is within the patch."""
-        return self._selection_artist.contains(event)[0]
+        return self._selection_artist.contains(event, radius=0)[0]
 
     @property
     def extents(self):
-        """Return (xmin, xmax, ymin, ymax)."""
-        (x0, x1), (y0, y1) = self._selection_artist.get_data()
+        """Return (x0, x1, y0, y1)."""
+        (x0, y0), (x1, y1) = self._start, self._end
         return x0, x1, y0, y1
 
     @extents.setter
     def extents(self, extents):
         # Update displayed shape
+        self._start, self._end = extents[::2], extents[1::2]
         self._draw_shape(extents)
-        if self._interactive:
-            # Update displayed handles
-            self._corner_handles.set_data(*self.ends)
-            self._center_handle.set_data(*self.center)
         self.set_visible(self.visible)
         self.update()
 
     def _set_active_handle(self, event):
         """Set active handle based on the location of the mouse event."""
         # Note: event.xdata/ydata in data coordinates, event.x/y in pixels
-        c_idx, c_dist = self._corner_handles.closest(event.x, event.y)
-        m_idx, m_dist = self._center_handle.closest(event.x, event.y)
+        end_idx, end_dist = self._end_handles.closest(event.x, event.y)
+        e_idx, e_dist = self._edge_handles.closest(event.x, event.y)
 
         if 'move' in self._state:
             self._active_handle = 'C'
-            self._extents_on_press = self.extents
         # Set active handle as closest handle, if mouse click is close enough.
-        elif m_dist < self.grab_range * 2:
-            # Prioritise center handle over other handles
-            self._active_handle = 'C'
-        elif c_dist > self.grab_range:
+        elif end_dist < self.grab_range * 2:
+            # Prioritise end handles over other handles
+            self._active_handle =  self._end_order[end_idx]
+        elif e_dist <= self.grab_range:
+            self._active_handle = 'Width'
+            # This is the vector from the center to the edge handle
+            vector = np.array(self.edge_centers) - np.array(self.center)
+            # in case linewidth is zero, take e_dist / 100
+            self._linewidth_on_press = max(self._linewidth, e_dist / 100.)
+            self._widthvector_on_press = vector[:, 0]
+        else:
             # Not close to any handles
             if self.drag_from_anywhere and self._contains(event):
                 # Check if we've clicked inside the region
@@ -3492,11 +3583,28 @@ class Line2DSelector(RectangleSelector):
             else:
                 self._active_handle = None
                 return
-        else:
-            # Closest to a corner handle
-            self._active_handle = self._corner_order[c_idx]
 
         self._extents_on_press = self.extents
+
+    @property
+    def angle(self):
+        x, y = np.diff(self.extents[:2]), np.diff(self.extents[2:])
+        return np.arctan2(y * self._aspect_ratio_correction, x) * 180. / np.pi
+
+    @property
+    def length(self):
+        dx, dy = np.array(self.extents[::2]) - np.array(self.extents[1::2])
+        return np.hypot(dx, dy * self._aspect_ratio_correction)
+
+    @property
+    def linewidth(self):
+        return self._linewidth
+
+    @linewidth.setter
+    def linewidth(self, value):
+        self._linewidth = max(value, self._min_linewidth)
+        # set extents to update patch
+        self.extents = self.extents
 
 
 class LassoSelector(_SelectorWidget):
