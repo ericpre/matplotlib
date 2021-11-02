@@ -680,6 +680,13 @@ class FreeType(SetupPackage):
                       "/t:Clean;Build",
                       f"/p:Configuration=Release;Platform={msbuild_platform}"])
             # Move to the corresponding Unix build path.
+            print('##################################################')
+            print('##################################################')
+            print(list(src_path.iterdir()))
+            print(list((src_path / "objs").iterdir()))
+            print(list((src_path / "objs" / vc).iterdir()))
+            print(list((src_path / "objs" / vc / msbuild_platform).iterdir()))
+
             (src_path / "objs" / ".libs").mkdir()
             # Be robust against change of FreeType version.
             lib_path, = (src_path / "objs" / vc / msbuild_platform).glob(
