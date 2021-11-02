@@ -674,8 +674,11 @@ class FreeType(SetupPackage):
                 f.truncate()
                 f.write(vcxproj)
 
+            print('----------------------------------------------------')
             cc = get_ccompiler()
+            print('----------------------------------------------------')
             cc.initialize()  # Get msbuild in the %PATH% of cc.spawn.
+            print('----------------------------------------------------')
             cc.spawn(["msbuild", str(sln_path),
                       "/t:Clean;Build",
                       f"/p:Configuration=Release;Platform={msbuild_platform}"])
