@@ -651,6 +651,7 @@ class FreeType(SetupPackage):
             sln_path = (
                 base_path / vc / "freetype.sln"
             )
+            (src_path / "objs" / vc).mkdir()
             # https://developercommunity.visualstudio.com/comments/190992/view.html
             (sln_path.parent / "Directory.Build.props").write_text("""
 <Project>
