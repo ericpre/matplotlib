@@ -693,8 +693,12 @@ class FreeType(SetupPackage):
 
             (src_path / "objs" / ".libs").mkdir()
             # Be robust against change of FreeType version.
-            lib_path, = (src_path / "objs").glob(
-                "freetype*.lib")
+            try:
+                lib_path, = (src_path / "objs" / vc / msbuild_platform).glob(
+                    "freetype*.lib")
+            except ValueError:
+                # for freetype 2.11.0
+                lib_path, = (src_path / "objs").glob("freetype*.lib")
             shutil.copy2(lib_path, src_path / "objs/.libs/libfreetype.lib")
 
 
