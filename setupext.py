@@ -646,7 +646,7 @@ class FreeType(SetupPackage):
             shutil.rmtree(src_path / "objs", ignore_errors=True)
             msbuild_platform = (
                 'x64' if platform.architecture()[0] == '64bit' else 'Win32')
-            base_path = Path("build/freetype-2.6.1/builds/windows")
+            base_path = Path(f"build/freetype-{LOCAL_FREETYPE_VERSION}/builds/windows")
             vc = 'vc2010'
             sln_path = (
                 base_path / vc / "freetype.sln"
