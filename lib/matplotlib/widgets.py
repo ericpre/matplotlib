@@ -3054,19 +3054,19 @@ class RectangleSelector(_SelectorWidget):
                     if self._active_handle in self._corner_order:
                         refmax = max(refx, refy, key=abs)
                     if self._active_handle in ['E', 'W'] or refmax == refx:
-                        dw = event.xdata - center[0]
-                        dh = dw / aspect_ratio
+                        hw = event.xdata - center[0]
+                        hh = hw / aspect_ratio
                     else:
-                        dh = event.ydata - center[1]
-                        dw = dh * aspect_ratio
+                        hh = event.ydata - center[1]
+                        hw = hh * aspect_ratio
                 else:
-                    dw = size_on_press[0] / 2
-                    dh = size_on_press[1] / 2
+                    hw = size_on_press[0] / 2
+                    hh = size_on_press[1] / 2
                     # cancel changes in perpendicular direction
                     if self._active_handle in ['E', 'W'] + self._corner_order:
-                        dw = abs(event.xdata - center[0])
+                        hw = abs(event.xdata - center[0])
                     if self._active_handle in ['N', 'S'] + self._corner_order:
-                        dh = abs(event.ydata - center[1])
+                        hh = abs(event.ydata - center[1])
 
                 x0, x1, y0, y1 = (center[0] - hw, center[0] + hw,
                                   center[1] - hh, center[1] + hh)
