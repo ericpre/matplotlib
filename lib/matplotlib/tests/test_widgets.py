@@ -565,6 +565,34 @@ def test_ellipse():
     assert_allclose(tool.geometry[:, 0], [70., 100])
 
 
+def test_annular_width_handle():
+    """For annular selection, test out the width"""
+    ax = get_ax()
+
+    def onselect(epress, erelease):
+        pass
+
+    fractional_width = 0.25
+    tool = widgets.AnnularSelector(ax, onselect=onselect,
+                                   fractional_width=fractional_width,
+                                   grab_range=10, interactive=True)
+    tool.extents = (100, 150, 100, 150)
+    w, h = tool.extents[1] - tool.extents[0], tool.extents[3] - tool.extents[2]
+    assert tool.annular_width == fractional_width * min(w, h) / 2
+
+    new_width = 10
+    tool.annular_width = new_width
+    assert tool.annular_width == new_width
+
+    # position of the handle
+    xdata = tool.extents[0] + w - new_width
+    ydata = tool.extents[2] + h / 2
+    xdiff = -5
+    xdata_new, ydata_new = xdata + xdiff, ydata
+    _resize_rectangle(tool, xdata, ydata, xdata_new, ydata_new)
+    assert tool.annular_width == new_width - xdiff
+
+
 def test_rectangle_handles():
     ax = get_ax()
 

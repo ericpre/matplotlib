@@ -19,7 +19,7 @@ import matplotlib as mpl
 from matplotlib import docstring
 from . import _api, backend_tools, cbook, colors, ticker
 from .lines import Line2D
-from .patches import Circle, Rectangle, Ellipse
+from .patches import Circle, Rectangle, Ellipse, Annulus
 from .transforms import TransformedPatchPath, Affine2D
 
 
@@ -3103,6 +3103,12 @@ class RectangleSelector(_SelectorWidget):
                      np.arctan2(a[1]-b[1], a[0]-b[0]))
             self.rotation = np.rad2deg(self._rotation_on_press + angle)
 
+        # Changing width annular selector
+        elif self._active_handle == 'Wi':
+            width = x1 - event.xdata
+            if width > 0:
+                self.annular_width = width
+
         elif resize:
             size_on_press = [x1 - x0, y1 - y0]
             center = [x0 + size_on_press[0] / 2, y0 + size_on_press[1] / 2]
@@ -3275,12 +3281,15 @@ class RectangleSelector(_SelectorWidget):
         # Update displayed shape
         self._draw_shape(extents)
         if self._interactive:
-            # Update displayed handles
-            self._corner_handles.set_data(*self.corners)
-            self._edge_handles.set_data(*self.edge_centers)
-            self._center_handle.set_data(*self.center)
+            self._set_handle_position()
         self.set_visible(self.visible)
         self.update()
+
+    def _set_handle_position(self):
+        # Update displayed handles
+        self._corner_handles.set_data(*self.corners)
+        self._edge_handles.set_data(*self.edge_centers)
+        self._center_handle.set_data(*self.center)
 
     @property
     def rotation(self):
@@ -3329,9 +3338,15 @@ class RectangleSelector(_SelectorWidget):
         c_idx, c_dist = self._corner_handles.closest(event.x, event.y)
         e_idx, e_dist = self._edge_handles.closest(event.x, event.y)
         m_idx, m_dist = self._center_handle.closest(event.x, event.y)
+        # For AnnularSelector
+        if hasattr(self, '_width_handle'):
+            w_idx, w_dist = self._width_handle.closest(event.x, event.y)
 
         if 'move' in self._state:
             self._active_handle = 'C'
+        # For AnnularSelector
+        elif hasattr(self, '_width_handle') and w_dist < self.grab_range * 2:
+            self._active_handle = 'Wi'
         # Set active handle as closest handle, if mouse click is close enough.
         elif m_dist < self.grab_range * 2:
             # Prioritise center handle over other handles
@@ -3373,12 +3388,103 @@ class RectangleSelector(_SelectorWidget):
 
 
 @docstring.Substitution(_RECTANGLESELECTOR_PARAMETERS_DOCSTRING.replace(
+    '__ARTIST_NAME__', 'annulus'))
+class AnnularSelector(RectangleSelector):
+    """
+    Select an annular elliptical region of an axes.
+
+    For the selector to remain responsive you must keep a reference to it.
+
+    %s
+
+    fractional_width : float in interval [0, 1]
+        Width of the annular ring defined in fraction of the minimum of the
+        minor and major radii.
+
+    """
+
+    def __init__(self, ax, onselect, drawtype='box', **kwargs):
+        if drawtype != 'box':
+            raise ValueError('drawtype argument not supported for '
+                             'AnnularSelector.')
+        # We use fractional width to create annulus patch easily
+        self._width_fractional = kwargs.pop('fractional_width', 0.5)
+
+        super().__init__(ax, onselect, **kwargs)
+
+        xw, yw = self.width_handle
+        self._width_handle = ToolHandles(self.ax, [xw], [yw], marker='D',
+                                         useblit=self.useblit)
+
+    def _init_shape(self, **props):
+        return Annulus((0, 0), (1, 1), self._width_fractional, visible=False,
+                       **props)
+
+    @property
+    def width_handle(self):
+        """Center of rectangle."""
+        x0, y0, width, height = self._rect_bbox
+        xwi, ywi = x0 + width - self.annular_width, y0 + height / 2.
+        transform = self._get_rotation_transform()
+        coords = transform.transform(np.array([xwi, ywi]).T).T
+        return coords[0], coords[1]
+
+    @property
+    def _handles_artists(self):
+        return (*self._center_handle.artists, *self._corner_handles.artists,
+                *self._edge_handles.artists, *self._width_handle.artists)
+
+    @property
+    def annular_width(self):
+        """
+        Return the width (thickness) of the annular selection. The width is
+        measured inwards from the outer ellipse.
+        """
+        return self._width_fractional * min(*self._selection_artist.radii)
+
+    @annular_width.setter
+    def annular_width(self, value):
+        min_a_b = min(*self._selection_artist.radii)
+        if value > min_a_b:
+            value = min_a_b
+        self._width_fractional = value / min_a_b
+        self._selection_artist.set_width(self._width_fractional, fractional=True)
+        self._set_handle_position()
+
+    def _set_handle_position(self):
+        # Update displayed handles
+        self._corner_handles.set_data(*self.corners)
+        self._edge_handles.set_data(*self.edge_centers)
+        self._center_handle.set_data(*self.center)
+        self._width_handle.set_data(*self.width_handle)
+
+    def _draw_shape(self, extents):
+        x0, x1, y0, y1, = extents
+        xmin, xmax = sorted([x0, x1])
+        ymin, ymax = sorted([y0, y1])
+        center = [x0 + (x1 - x0) / 2., y0 + (y1 - y0) / 2.]
+        a = (xmax - xmin) / 2.
+        b = (ymax - ymin) / 2.
+
+        self._selection_artist.center = center
+        self._selection_artist.radii = a, b
+        self._selection_artist.angle = self.rotation
+        self._selection_artist.set_width(self._width_fractional, fractional=True)
+
+    @property
+    def _rect_bbox(self):
+        x, y = self._selection_artist.center
+        a, b = self._selection_artist.get_radii()
+        return x - a, y - b, 2 * a, 2 * b
+
+
+@docstring.Substitution(_RECTANGLESELECTOR_PARAMETERS_DOCSTRING.replace(
     '__ARTIST_NAME__', 'ellipse'))
 class EllipseSelector(RectangleSelector):
     """
     Select an elliptical region of an axes.
 
-    For the cursor to remain responsive you must keep a reference to it.
+    For the selector to remain responsive you must keep a reference to it.
 
     Press and release events triggered at the same coordinates outside the
     selection will clear the selector, except when

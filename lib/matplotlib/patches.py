@@ -1694,6 +1694,8 @@ class Annulus(Patch):
         self.center = xy
         self.width = width
         self.angle = angle
+        # Required for EllipseSelector with axes aspect ratio != 1
+        self._aspect_ratio_correction = 1.0
         self._path = None
 
     def __str__(self):
@@ -1723,7 +1725,7 @@ class Annulus(Patch):
 
     center = property(get_center, set_center)
 
-    def set_width(self, width):
+    def set_width(self, width, fractional=False):
         """
         Set the width (thickness) of the annulus ring.
 
@@ -1732,8 +1734,21 @@ class Annulus(Patch):
         Parameters
         ----------
         width : float
+            The width of the annulus ring if fractional is False, otherwise
+            must be in internal [0, 1] and is defined as a fraction of the
+            minimum of a and b.
+        fractional : bool, default: False
+           If True the width input is defined as a fraction of the minimum of
+           a and b.
         """
-        if min(self.a, self.b) <= width:
+        min_a_b = min(self.a, self.b)
+        if fractional:
+            if width < 0 or width > 1:
+                raise ValueError(
+                    'With `fractional=True`, the width input must be in '
+                    'interval [0, 1]')
+            width = width * min_a_b
+        if width > min_a_b:
             raise ValueError(
                 'Width of annulus must be less than or equal semi-minor axis')
 
@@ -1818,9 +1833,11 @@ class Annulus(Patch):
     radii = property(get_radii, set_radii)
 
     def _transform_verts(self, verts, a, b):
+        a, b = self._convert_xy_units((a, b))
         return transforms.Affine2D() \
-            .scale(*self._convert_xy_units((a, b))) \
+            .scale(a, b * self._aspect_ratio_correction) \
             .rotate_deg(self.angle) \
+            .scale(1, 1 / self._aspect_ratio_correction) \
             .translate(*self._convert_xy_units(self.center)) \
             .transform(verts)
 
