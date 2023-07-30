@@ -5218,7 +5218,8 @@ default: :rc:`scatter.edgecolors`
         """%(quiver_doc)s"""
         # Make sure units are handled for x and y values
         args = self._quiver_units(args, kwargs)
-        q = mquiver.Quiver(self, *args, **kwargs)
+        kwargs.setdefault('offset_transform', self.transData)
+        q = mquiver.Quiver(*args, **kwargs)
         self.add_collection(q, autolim=True)
         self._request_autoscale_view()
         return q
