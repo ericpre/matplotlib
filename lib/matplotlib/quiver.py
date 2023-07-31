@@ -496,6 +496,7 @@ class Quiver(mcollections.PolyCollection):
 
         kwargs.setdefault('facecolors', color)
         kwargs.setdefault('linewidths', (0,))
+        kwargs.setdefault('offset_transform', kwargs.pop('transform', None))
         super().__init__([], offsets=self.XY, closed=False, **kwargs)
         self.polykw = kwargs
         self.set_UVC(U, V, C)
