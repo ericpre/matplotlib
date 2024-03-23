@@ -5372,7 +5372,8 @@ class Axes(_AxesBase):
         """%(quiver_doc)s"""
         # Make sure units are handled for x and y values
         args = self._quiver_units(args, kwargs)
-        q = mquiver.Quiver(self, *args, **kwargs)
+        kwargs.setdefault('transform', self.transData)
+        q = mquiver.Quiver(*args, **kwargs)
         self.add_collection(q, autolim=True)
         self._request_autoscale_view()
         return q

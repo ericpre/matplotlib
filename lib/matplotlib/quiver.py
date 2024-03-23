@@ -22,6 +22,7 @@ from numpy import ma
 
 from matplotlib import _api, cbook, _docstring
 import matplotlib.artist as martist
+import matplotlib.axes as maxes
 import matplotlib.collections as mcollections
 from matplotlib.patches import CirclePolygon
 import matplotlib.text as mtext
@@ -332,10 +333,10 @@ class QuiverKey(martist.Artist):
                                                 np.array([u]), np.array([v]), 'uv')
             kwargs = self.Q.polykw
             kwargs.update(self.kw)
+            kwargs['offset_transform'] = self.get_transform()
             self.vector = mcollections.PolyCollection(
                 self.verts,
                 offsets=[(self.X, self.Y)],
-                offset_transform=self.get_transform(),
                 **kwargs)
             if self.color is not None:
                 self.vector.set_color(self.color)
@@ -472,7 +473,7 @@ class Quiver(mcollections.PolyCollection):
     Umask = _api.deprecate_privatize_attribute("3.9")
 
     @_docstring.Substitution(_quiver_doc)
-    def __init__(self, ax, *args,
+    def __init__(self, *args,
                  scale=None, headwidth=3, headlength=5, headaxislength=4.5,
                  minshaft=1, minlength=1, units='width', scale_units=None,
                  angles='uv', width=None, color='k', pivot='tail', **kwargs):
@@ -482,8 +483,9 @@ class Quiver(mcollections.PolyCollection):
         by the following pyplot interface documentation:
         %s
         """
-        self._axes = ax  # The attr actually set by the Artist.axes property.
-
+        if isinstance(args[0], maxes.Axes):
+            _api.warn_deprecated('3.9.0', name='ax')
+            args = args[1:]
         self.scale = scale
         self.headwidth = headwidth
         self.headlength = float(headlength)
@@ -500,12 +502,10 @@ class Quiver(mcollections.PolyCollection):
         self.pivot = pivot.lower()
         _api.check_in_list(self._PIVOT_VALS, pivot=self.pivot)
 
-        self.transform = kwargs.pop('transform', ax.transData)
         kwargs.setdefault('facecolors', color)
         kwargs.setdefault('linewidths', (0,))
-        super().__init__(
-            [], offset_transform=self.transform, closed=False, **kwargs
-            )
+        kwargs.setdefault('offset_transform', kwargs.pop('transform', None))
+        super().__init__([], closed=False, **kwargs)
         self.polykw = kwargs
 
         self._U = self._V = self._C = None

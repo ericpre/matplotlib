@@ -358,6 +358,22 @@ def test_collection_log_datalim(fig_test, fig_ref):
     ax_ref.plot(x, y, marker="o", ls="")
 
 
+def test_quiver_offsets_ax_deprecated():
+    fig, ax = plt.subplots()
+    x = np.arange(-10, 10, 1)
+    y = np.arange(-10, 10, 1)
+    U, V = np.meshgrid(x, y)
+    X = U.ravel()
+    Y = V.ravel()
+    with pytest.warns(mpl.MatplotlibDeprecationWarning):
+        qc = mquiver.Quiver(ax, X, Y, U, V)
+    ax.add_collection(qc)
+    ax.autoscale_view()
+
+    expected_offsets = np.column_stack([X, Y])
+    np.testing.assert_allclose(expected_offsets, qc.get_offsets())
+
+
 def test_quiver_offsets():
     fig, ax = plt.subplots()
     x = np.arange(-10, 10, 1)
@@ -365,7 +381,7 @@ def test_quiver_offsets():
     U, V = np.meshgrid(x, y)
     X = U.ravel()
     Y = V.ravel()
-    qc = mquiver.Quiver(ax, X, Y, U, V)
+    qc = mquiver.Quiver(X, Y, U, V)
     ax.add_collection(qc)
     ax.autoscale_view()
 
@@ -414,9 +430,7 @@ def test_quiver_change_UVC():
     Y = np.arange(-10, 10, 1)
     U, V = np.meshgrid(X, Y)
     M = np.hypot(U, V)
-    qc = mquiver.Quiver(
-        ax, X, Y, U, V, M
-        )
+    qc = mquiver.Quiver(X, Y, U, V, M)
     ax.add_collection(qc)
     ax.autoscale_view()
 
