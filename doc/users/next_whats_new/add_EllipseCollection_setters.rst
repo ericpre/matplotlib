@@ -33,8 +33,8 @@ can now be changed after the collection have been created.
     ax.set_xlim(-2, 12)
     ax.set_ylim(-2, 12)
 
-    new_widths = rng.random((10, 2)) * 2
-    new_heights = rng.random((10, 2)) * 3
-    new_angles = rng.random((10, 2)) * 180
+    new_widths = rng.random((10, )) * 2
+    new_heights = rng.random((10, )) * 3
+    new_angles = rng.random((10, )) * 180
 
     ec.set(widths=new_widths, heights=new_heights, angles=new_angles)

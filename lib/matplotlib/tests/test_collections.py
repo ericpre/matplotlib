@@ -428,9 +428,9 @@ def test_EllipseCollection_setter_getter():
         offset_transform=ax.transData,
         )
 
-    assert_array_almost_equal(ec._widths, np.array(widths).ravel() * 0.5)
-    assert_array_almost_equal(ec._heights, np.array(heights).ravel() * 0.5)
-    assert_array_almost_equal(ec._angles, np.deg2rad(angles).ravel())
+    assert_array_almost_equal(ec._widths, np.array(widths) * 0.5)
+    assert_array_almost_equal(ec._heights, np.array(heights) * 0.5)
+    assert_array_almost_equal(ec._angles, np.deg2rad(angles))
 
     assert_array_almost_equal(ec.get_widths(), widths)
     assert_array_almost_equal(ec.get_heights(), heights)
@@ -440,15 +440,49 @@ def test_EllipseCollection_setter_getter():
     ax.set_xlim(-2, 12)
     ax.set_ylim(-2, 12)
 
-    new_widths = rng.random((10, 2)) * 2
-    new_heights = rng.random((10, 2)) * 3
-    new_angles = rng.random((10, 2)) * 180
+    new_widths = rng.random((10, )) * 2
+    new_heights = rng.random((10, )) * 3
+    new_angles = rng.random((10, )) * 180
 
     ec.set(widths=new_widths, heights=new_heights, angles=new_angles)
 
-    assert_array_almost_equal(ec.get_widths(), new_widths.ravel())
-    assert_array_almost_equal(ec.get_heights(), new_heights.ravel())
-    assert_array_almost_equal(ec.get_angles(), new_angles.ravel())
+    assert_array_almost_equal(ec.get_widths(), new_widths)
+    assert_array_almost_equal(ec.get_heights(), new_heights)
+    assert_array_almost_equal(ec.get_angles(), new_angles)
+
+    for array, name in zip(
+        (new_widths, new_heights, new_angles), ("widths", "heights", "angles")
+    ):
+        # length doesn't match number of ellipse in the collection
+        with pytest.raises(ValueError):
+            kwargs = {name: array[:2]}
+            ec.set(**kwargs)
+
+        # setting a single value
+        kwargs = {name: array[0]}
+        ec.set(**kwargs)
+        assert_array_almost_equal(getattr(ec, f"get_{name}")(), kwargs[name])
+
+
+def test_EllipseCollection_wrong_length_argument():
+    # Test widths, heights and angle setter
+    rng = np.random.default_rng(0)
+
+    with pytest.raises(ValueError):
+        _ = mcollections.EllipseCollection(
+            widths=(2, 3),
+            heights=(4, ),
+            angles=(45, ),
+            offsets=rng.random((10, 2)) * 10,
+            )
+
+    with pytest.raises(ValueError):
+        _ = mcollections.EllipseCollection(
+            widths=(2, ),
+            heights=(3, 4),
+            angles=(45, ),
+            offsets=rng.random((10, 2)) * 10,
+            )
 
 
 @image_comparison(['polycollection_close.png'], remove_text=True, style='mpl20')

@@ -1728,11 +1728,16 @@ class EllipseCollection(Collection):
         Parameters
         ----------
         widths : array-like
-            The lengths of the first axes (e.g., major axis lengths).
+            The lengths of the first axes (e.g., major axis lengths). The size
+            of the array must one or the same as other array inputs
+            (``heights``, ``angles``).
         heights : array-like
-            The lengths of second axes.
+            The lengths of second axes. The size of the array must one or
+            the same as other array inputs (``widths``, ``angles``).
         angles : array-like
-            The angles of the first axes, degrees CCW from the x-axis.
+            The angles of the first axes, degrees CCW from the x-axis. The size
+            of the array must one or the same as other array inputs
+            (``widths``, ``angles``).
         units : {'points', 'inches', 'dots', 'width', 'height', 'x', 'y', 'xy'}
             The units in which majors and minors are given; 'width' and
             'height' refer to the dimensions of the axes, while 'x' and 'y'
@@ -1745,13 +1750,24 @@ class EllipseCollection(Collection):
             Forwarded to `Collection`.
         """
         super().__init__(**kwargs)
+
         self._set_widths(widths)
         self._set_heights(heights)
         self._set_angles(angles)
         self._units = units
+
         self.set_transform(transforms.IdentityTransform())
         self._transforms = np.empty((0, 3, 3))
         self._paths = [mpath.Path.unit_circle()]
+
+    def _check_length(self, array, name):
+        N = len(self.get_offsets())
+        length = np.asanyarray(array).size
+        if not (length == N or length == 1):
+            raise ValueError(
+                f'Argument {name} has a size {length} which does not '
+                f'match {N}, the number of ellipses'
+            )
 
     def _set_transforms(self):
         """Calculate transforms immediately before drawing."""
@@ -1796,12 +1812,15 @@ class EllipseCollection(Collection):
             self.set_transform(_affine(m))
 
     def _set_widths(self, widths):
+        self._check_length(widths, "widths")
         self._widths = 0.5 * np.asarray(widths).ravel()
 
     def _set_heights(self, heights):
+        self._check_length(heights, "heights")
         self._heights = 0.5 * np.asarray(heights).ravel()
 
     def _set_angles(self, angles):
+        self._check_length(angles, "angles")
         self._angles = np.deg2rad(angles).ravel()
 
     def set_widths(self, widths):
