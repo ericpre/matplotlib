@@ -450,6 +450,21 @@ def test_EllipseCollection_setter_getter():
     assert_array_almost_equal(ec.get_heights(), new_heights)
     assert_array_almost_equal(ec.get_angles(), new_angles)
 
+    # set incompatible length
+    with pytest.raises(ValueError):
+        ec.set(widths=new_widths[:5])
+
+    ec.set(
+        offsets=offsets[:4],
+        widths=new_widths[:4],
+        heights=new_heights[:4],
+        angles=new_angles[:4]
+    )
+    assert_array_almost_equal(ec.get_offsets(), offsets[:4])
+    assert_array_almost_equal(ec.get_widths(), new_widths[:4])
+    assert_array_almost_equal(ec.get_heights(), new_heights[:4])
+    assert_array_almost_equal(ec.get_angles(), new_angles[:4])
+
     for array, name in zip(
         (new_widths, new_heights, new_angles), ("widths", "heights", "angles")
     ):

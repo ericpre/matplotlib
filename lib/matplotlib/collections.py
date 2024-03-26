@@ -1760,13 +1760,23 @@ class EllipseCollection(Collection):
         self._transforms = np.empty((0, 3, 3))
         self._paths = [mpath.Path.unit_circle()]
 
-    def _check_length(self, array, name):
-        N = len(self.get_offsets())
-        length = np.asanyarray(array).size
-        if not (length == N or length == 1):
+        # Since we overwrite the set method, we need to update
+        # the signature and docstring
+        self._update_set_signature_and_docstring()
+
+    def _check_length(self, array, name, expected_length=None):
+        if not np.iterable(array):
+            # array is not iterable, no need to check length
+            return
+        # when `expected_length` is None, use `offsets`
+        # as reference length
+        if expected_length is None:
+            expected_length = len(self.get_offsets())
+        length = len(np.asanyarray(array))
+        if not (length == expected_length or length == 1):
             raise ValueError(
                 f'Argument {name} has a size {length} which does not '
-                f'match {N}, the number of ellipses'
+                f'match {expected_length}, the number of ellipses'
             )
 
     def _set_transforms(self):
@@ -1811,16 +1821,20 @@ class EllipseCollection(Collection):
             m[:2, 2:] = 0
             self.set_transform(_affine(m))
 
-    def _set_widths(self, widths):
-        self._check_length(widths, "widths")
+    def set_offsets(self, offsets, expected_length=None):
+        self._check_length(offsets, "offsets", expected_length)
+        super().set_offsets(offsets)
+
+    def _set_widths(self, widths, expected_length=None):
+        self._check_length(widths, "widths", expected_length)
         self._widths = 0.5 * np.asarray(widths).ravel()
 
-    def _set_heights(self, heights):
-        self._check_length(heights, "heights")
+    def _set_heights(self, heights, expected_length=None):
+        self._check_length(heights, "heights", expected_length)
         self._heights = 0.5 * np.asarray(heights).ravel()
 
-    def _set_angles(self, angles):
-        self._check_length(angles, "angles")
+    def _set_angles(self, angles, expected_length=None):
+        self._check_length(angles, "angles", expected_length)
         self._angles = np.deg2rad(angles).ravel()
 
     def set_widths(self, widths):
@@ -1833,6 +1847,11 @@ class EllipseCollection(Collection):
         self._set_heights(heights)
         self.stale = True
 
+    def set_angles(self, angles):
+        """Set the angles of the first axes, degrees CCW from the x-axis."""
+        self._set_angles(angles)
+        self.stale = True
+
     def get_widths(self):
         """Get the lengths of the first axes (e.g., major axis)."""
         return self._widths * 2
@@ -1841,14 +1860,36 @@ class EllipseCollection(Collection):
         """Set the lengths of second axes (e.g., minor axes)."""
         return self._heights * 2
 
-    def set_angles(self, angles):
-        """Set the angles of the first axes, degrees CCW from the x-axis."""
-        self._set_angles(angles)
-        self.stale = True
-
     def get_angles(self):
         """Get the angles of the first axes, degrees CCW from the x-axis."""
         return np.rad2deg(self._angles)
+
+    def set(self, **kwargs):
+        # Check that all relevant kwargs have compatible length
+        args_list = ["offsets", "widths", "heights", "angles"]
+        # check length only when relevant attribute are in kwargs
+        if np.all([a in args_list for a in kwargs]):
+            # need to check against passed kwargs by also
+            # already existing values
+            args_to_check = {
+                k: kwargs.get(k, getattr(self, f"get_{k}")()) for k in args_list
+                }
+            # use offsets as a reference
+            expected_length = len(args_to_check["offsets"])
+            for k in args_list:
+                self._check_length(args_to_check[k], k, expected_length)
+
+            offsets = kwargs.pop("offsets", None)
+            if offsets is not None:
+                self.set_offsets(offsets, expected_length)
+
+            # Set other kwargs
+            kwds = {k: kwargs.pop(k) for k in list(kwargs.keys()) if k in args_list}
+            for k, v in kwds.items():
+                # self._check_length(kwds[k], k, expected_length)
+                getattr(self, f"_set_{k}")(kwds[k], expected_length)
+
+        super().set(**kwargs)
 
     @artist.allow_rasterization
     def draw(self, renderer):
